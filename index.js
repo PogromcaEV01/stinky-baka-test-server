@@ -247,3 +247,27 @@ setInterval(async () => {
 server.listen(port, () => {
     console.log(`Serwer działa na porcie ${port}`);
 });
+
+// --- DIAGNOSTYKA MODELI GOOGLE ---
+setTimeout(async () => {
+    try {
+        console.log("Sprawdzam listę dostępnych modeli dla Twojego klucza...");
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
+        const data = await response.json();
+        
+        if (data.models) {
+            // Filtrujemy tylko modele z rodziny Gemini
+            const geminiModels = data.models
+                .filter(m => m.name.includes("gemini"))
+                .map(m => m.name);
+                
+            console.log("=== TWOJE DOSTĘPNE MODELE GEMINI ===");
+            console.log(geminiModels.join("\n"));
+            console.log("====================================");
+        } else {
+            console.log("Odpowiedź Google (brak modeli):", data);
+        }
+    } catch (err) {
+        console.error("Błąd podczas listowania modeli:", err);
+    }
+}, 3000);
