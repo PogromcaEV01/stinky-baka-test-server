@@ -183,11 +183,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('evaluate_ai', async (data) => {
+socket.on('evaluate_ai', async (data) => {
         let roomId = socket.currentRoom;
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                // DODAJ TE DWIE LINJKI PONIŻEJ:
+                console.log("API Key start:", (process.env.GEMINI_API_KEY || "BRAK").substring(0, 5));
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-002" });
+                
                 const prompt = `Jesteś sędzią w grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania opisują ten sam powód / mają taki sam sens logiczny w kontekście psychologicznego wyboru przedmiotu? Odpowiedz tylko jednym słowem: TAK lub NIE.`;
                 
                 const result = await model.generateContent(prompt);
@@ -197,7 +200,7 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('ai_evaluation_result', isAgree);
             } catch (e) {
                 console.error("AI Error:", e);
-                io.to(roomId).emit('chat_msg', "🤖 Błąd AI. Uznaję brak zgodności.");
+                io.to(roomId).emit('chat_msg', "🤖 Wystąpił błąd podczas analizy AI. Uznaję, że kartki były niezgodne.");
                 io.to(roomId).emit('ai_evaluation_result', false);
             }
         }
