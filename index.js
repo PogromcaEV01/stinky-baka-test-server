@@ -191,9 +191,9 @@ socket.on('evaluate_ai', async (data) => {
                 
                 // Wymuszenie na modelu zwrotu struktury JSON (responseMimeType)
                 const model = genAI.getGenerativeModel({ 
-                    model: "gemini-2.5-flash",
-                    generationConfig: { responseMimeType: "application/json" }
-                });
+    model: "gemini-1.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+});
                 
                 const prompt = `Jesteś sędzią w psychologicznej grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania mają taki sam sens logiczny w kontekście ukrytej intencji?
 Zwróć poprawny JSON z dwoma polami:
