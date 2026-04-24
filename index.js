@@ -167,33 +167,47 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- LOGIKA SĘDZIEGO AI (Gemini) ---
-    socket.on('request_ai', () => {
-        let roomId = socket.currentRoom;
-        if (roomId && rooms[roomId]) {
-            rooms[roomId].aiVotes++;
-            socket.emit('chat_msg', "Zaproponowałeś użycie AI do oceny.");
-            socket.to(roomId).emit('chat_msg', "Przeciwnik proponuje użycie AI do sędziowania. Kliknij przycisk AI, aby się zgodzić.");
-            
-            if (rooms[roomId].aiVotes >= 2) {
-                rooms[roomId].aiMode = true;
-                io.to(roomId).emit('ai_mode_active');
-                io.to(roomId).emit('chat_msg', "🤖 Tryb Sędziego AI został aktywowany do końca gry!");
-            }
-        }
-    });
-
-socket.on('evaluate_ai', async (data) => {
+    socket.on('evaluate_ai', async (data) => {
         let roomId = socket.currentRoom;
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
                 console.log("API Key start:", (process.env.GEMINI_API_KEY || "BRAK").substring(0, 5));
                 
-                // Wymuszenie na modelu zwrotu struktury JSON (responseMimeType)
+                // Używamy stabilnego modelu i WYMUSZAMY zwrot JSON-a
                 const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash",
-    generationConfig: { responseMimeType: "application/json" }
-});
+                    model: "gemini-2.5-flash",
+                    generationConfig: { responseMimeType: "application/json" }
+                });
+                
+                const prompt = `Jesteś sędzią w psychologicznej grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania mają taki sam sens logiczny w kontekście ukrytej intencji?
+Zwróć poprawny JSON z dwoma polami:
+"werdykt": wpisz "TAK" lub "NIE",
+"uzasadnienie": krótkie, jednozdaniowe wyjaśnienie Twojej decyzji.`;
+                
+                const result = await model.generateContent(prompt);
+                const text = result.response.text();
+                
+                let isAgree = false;
+                let reason = "Brak uzasadnienia.";
+
+                try {
+                    const parsed = JSON.parse(text);
+                    isAgree = parsed.werdykt === "TAK";
+                    reason = parsed.uzasadnienie || "Brak uzasadnienia.";
+                } catch (parseError) {
+                    console.error("Błąd parsowania JSON od AI:", parseError, text);
+                    reason = "Błąd dekodowania odpowiedzi AI.";
+                }
+                
+                console.log("Wysyłam do frontu:", { isAgree, reason }); // Log upewniający nas na Render.com
+                io.to(roomId).emit('ai_evaluation_result', { isAgree, reason });
+            } catch (e) {
+                console.error("AI Error:", e);
+                io.to(roomId).emit('chat_msg', "🤖 Wystąpił błąd podczas analizy AI. Uznaję, że kartki były niezgodne.");
+                io.to(roomId).emit('ai_evaluation_result', { isAgree: false, reason: "Błąd serwera AI." });
+            }
+        }
+    });
                 
                 const prompt = `Jesteś sędzią w psychologicznej grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania mają taki sam sens logiczny w kontekście ukrytej intencji?
 Zwróć poprawny JSON z dwoma polami:
