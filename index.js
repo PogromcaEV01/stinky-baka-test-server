@@ -188,6 +188,7 @@ socket.on('evaluate_ai', async (data) => {
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
                 console.log("API Key start:", (process.env.GEMINI_API_KEY || "BRAK").substring(0, 5));
+                
                 // Wymuszenie na modelu zwrotu struktury JSON (responseMimeType)
                 const model = genAI.getGenerativeModel({ 
                     model: "gemini-2.5-flash",
