@@ -187,21 +187,39 @@ socket.on('evaluate_ai', async (data) => {
         let roomId = socket.currentRoom;
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
-                // DODAJ TE DWIE LINJKI PONIŻEJ:
                 console.log("API Key start:", (process.env.GEMINI_API_KEY || "BRAK").substring(0, 5));
                 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
                 
-                const prompt = `Jesteś sędzią w grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania opisują ten sam powód / mają taki sam sens logiczny w kontekście psychologicznego wyboru przedmiotu? Odpowiedz tylko jednym słowem: TAK lub NIE.`;
+                const prompt = `Jesteś sędzią w psychologicznej grze w truciznę. Gracz 1 zapisał intencję: "${data.r1}". Gracz 2 zapisał intencję: "${data.r2}". Twoim zadaniem jest ocenić, czy te dwa zdania mają taki sam sens logiczny/opisują ten sam powód wyboru.
+Odpowiedz obowiązkowo w formacie JSON zawierającym dwa pola:
+- "werdykt": wpisz dokładnie "TAK" lub "NIE"
+- "uzasadnienie": bardzo krótkie, jednozdaniowe wyjaśnienie Twojej decyzji.`;
                 
                 const result = await model.generateContent(prompt);
-                const text = result.response.text().trim().toUpperCase();
-                const isAgree = text.includes('TAK');
+                let text = result.response.text().trim();
                 
-                io.to(roomId).emit('ai_evaluation_result', isAgree);
+                // Zabezpieczenie przed znacznikami markdown, jeśli AI zwróci blok kodu ```json
+                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                
+                let isAgree = false;
+                let reason = "";
+
+                try {
+                    const parsed = JSON.parse(text);
+                    isAgree = parsed.werdykt === "TAK";
+                    reason = parsed.uzasadnienie || "Brak uzasadnienia.";
+                } catch (parseError) {
+                    // Fallback, jeśli AI zwróci zwykły tekst zamiast JSON
+                    isAgree = text.toUpperCase().includes('TAK');
+                    reason = text;
+                }
+                
+                // Wysyłamy teraz obiekt zawierający isAgree oraz reason
+                io.to(roomId).emit('ai_evaluation_result', { isAgree, reason });
             } catch (e) {
                 console.error("AI Error:", e);
                 io.to(roomId).emit('chat_msg', "🤖 Wystąpił błąd podczas analizy AI. Uznaję, że kartki były niezgodne.");
-                io.to(roomId).emit('ai_evaluation_result', false);
+                io.to(roomId).emit('ai_evaluation_result', { isAgree: false, reason: "Błąd serwera AI." });
             }
         }
     });
