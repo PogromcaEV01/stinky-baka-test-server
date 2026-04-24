@@ -60,7 +60,60 @@ app.post('/api/login', async (req, res) => {
         res.status(500).json({ success: false, message: "Błąd serwera." });
     }
 });
+// --- ENDPOINT REJESTRACJI PREMIUM ---
+app.post('/api/register', async (req, res) => {
+    const { username, password, inviteCode } = req.body;
 
+    if (!username || !password || !inviteCode) {
+        return res.status(400).json({ success: false, message: "Wypełnij wszystkie pola." });
+    }
+
+    try {
+        // 1. Sprawdzamy, czy kod istnieje i czy nie został zużyty
+        const { data: codeData, error: codeError } = await supabase
+            .from('invite_codes')
+            .select('*')
+            .eq('code', inviteCode)
+            .eq('is_used', false)
+            .single();
+
+        if (!codeData || codeError) {
+            return res.status(400).json({ success: false, message: "Kod dostępu jest nieprawidłowy lub został już zużyty." });
+        }
+
+        // 2. Sprawdzamy, czy login nie jest już zajęty
+        const { data: userCheck } = await supabase
+            .from('premium_users')
+            .select('username')
+            .eq('username', username)
+            .single();
+
+        if (userCheck) {
+            return res.status(400).json({ success: false, message: "Ten identyfikator jest już zajęty." });
+        }
+
+        // 3. Dodajemy nowego użytkownika
+        const { error: insertError } = await supabase
+            .from('premium_users')
+            .insert([{ username, password }]);
+
+        if (insertError) {
+            throw insertError;
+        }
+
+        // 4. Oznaczamy kod jako zużyty
+        await supabase
+            .from('invite_codes')
+            .update({ is_used: true })
+            .eq('code', inviteCode);
+
+        res.json({ success: true, message: "Konto utworzone pomyślnie! Możesz się zalogować." });
+
+    } catch (e) {
+        console.error("Błąd rejestracji:", e);
+        res.status(500).json({ success: false, message: "Błąd serwera podczas rejestracji." });
+    }
+});
 // --- LOGIKA SOCKET.IO ---
 io.on('connection', (socket) => {
     
