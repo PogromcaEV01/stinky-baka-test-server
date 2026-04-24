@@ -189,7 +189,7 @@ socket.on('evaluate_ai', async (data) => {
             try {
                 // DODAJ TE DWIE LINJKI PONIŻEJ:
                 console.log("API Key start:", (process.env.GEMINI_API_KEY || "BRAK").substring(0, 5));
-                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-002" });
+                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
                 
                 const prompt = `Jesteś sędzią w grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania opisują ten sam powód / mają taki sam sens logiczny w kontekście psychologicznego wyboru przedmiotu? Odpowiedz tylko jednym słowem: TAK lub NIE.`;
                 
@@ -247,27 +247,3 @@ setInterval(async () => {
 server.listen(port, () => {
     console.log(`Serwer działa na porcie ${port}`);
 });
-
-// --- DIAGNOSTYKA MODELI GOOGLE ---
-setTimeout(async () => {
-    try {
-        console.log("Sprawdzam listę dostępnych modeli dla Twojego klucza...");
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
-        const data = await response.json();
-        
-        if (data.models) {
-            // Filtrujemy tylko modele z rodziny Gemini
-            const geminiModels = data.models
-                .filter(m => m.name.includes("gemini"))
-                .map(m => m.name);
-                
-            console.log("=== TWOJE DOSTĘPNE MODELE GEMINI ===");
-            console.log(geminiModels.join("\n"));
-            console.log("====================================");
-        } else {
-            console.log("Odpowiedź Google (brak modeli):", data);
-        }
-    } catch (err) {
-        console.error("Błąd podczas listowania modeli:", err);
-    }
-}, 3000);
