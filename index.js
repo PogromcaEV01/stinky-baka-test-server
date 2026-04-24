@@ -187,7 +187,7 @@ io.on('connection', (socket) => {
         let roomId = socket.currentRoom;
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
-                const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const prompt = `Jesteś sędzią w grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania opisują ten sam powód / mają taki sam sens logiczny w kontekście psychologicznego wyboru przedmiotu? Odpowiedz tylko jednym słowem: TAK lub NIE.`;
                 
                 const result = await model.generateContent(prompt);
