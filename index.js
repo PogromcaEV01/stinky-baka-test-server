@@ -208,35 +208,6 @@ Zwróć poprawny JSON z dwoma polami:
             }
         }
     });
-                
-                const prompt = `Jesteś sędzią w psychologicznej grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania mają taki sam sens logiczny w kontekście ukrytej intencji?
-Zwróć poprawny JSON z dwoma polami:
-"werdykt": wpisz "TAK" lub "NIE",
-"uzasadnienie": krótkie, jednozdaniowe wyjaśnienie Twojej decyzji.`;
-                
-                const result = await model.generateContent(prompt);
-                const text = result.response.text();
-                
-                let isAgree = false;
-                let reason = "Brak uzasadnienia.";
-
-                try {
-                    const parsed = JSON.parse(text);
-                    isAgree = parsed.werdykt === "TAK";
-                    reason = parsed.uzasadnienie;
-                } catch (parseError) {
-                    console.error("Błąd parsowania JSON od AI:", parseError, text);
-                    reason = "Błąd dekodowania odpowiedzi AI.";
-                }
-                
-                io.to(roomId).emit('ai_evaluation_result', { isAgree, reason });
-            } catch (e) {
-                console.error("AI Error:", e);
-                io.to(roomId).emit('chat_msg', "🤖 Wystąpił błąd podczas analizy AI. Uznaję, że kartki były niezgodne.");
-                io.to(roomId).emit('ai_evaluation_result', { isAgree: false, reason: "Błąd serwera AI." });
-            }
-        }
-    });
 
     // Przekaźnik zdarzeń gry (Relay)
     const relayEvent = (eventName) => {
