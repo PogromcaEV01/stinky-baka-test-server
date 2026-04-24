@@ -2,12 +2,15 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { createClient } = require('@supabase/supabase-js');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); // NOWE
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
 
 const port = process.env.PORT || 10000;
 const app = express();
+
+// Konfiguracja Middleware
 app.use(cors());
+app.use(express.json()); // Wymagane do odbierania danych JSON w POST /api/login
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -15,6 +18,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 // Inicjalizacja Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "brak_klucza");
 
+// Inicjalizacja Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 let supabase = null;
@@ -23,14 +27,44 @@ if (supabaseUrl && supabaseKey) {
     console.log("Supabase zainicjowane poprawnie.");
 }
 
+// Globalny stan gry
 let queues = { 1: [], 2: [], 3: [], 4: [] };
 let activeMatches = 0;
-
-// Obiekt do przechowywania danych o pokojach (np. zgoda na AI)
 const rooms = {};
 
+// --- ENDPOINT LOGOWANIA PREMIUM ---
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!supabase) {
+        return res.status(500).json({ success: false, message: "Baza danych niedostępna." });
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('premium_users')
+            .select('*')
+            .eq('username', username)
+            .eq('password', password)
+            .single();
+
+        if (data) {
+            // Logowanie udane
+            res.json({ success: true });
+        } else {
+            // Błędne dane
+            res.status(401).json({ success: false, message: "Błędny login lub hasło." });
+        }
+    } catch (e) {
+        console.error("Błąd logowania:", e);
+        res.status(500).json({ success: false, message: "Błąd serwera." });
+    }
+});
+
+// --- LOGIKA SOCKET.IO ---
 io.on('connection', (socket) => {
     
+    // Szukanie przeciwnika
     socket.on('search_rank', (rank) => {
         const queue = queues[rank];
         if (queue.length > 0) {
@@ -40,7 +74,6 @@ io.on('connection', (socket) => {
             socket.join(roomId); opponent.join(roomId);
             socket.currentRoom = roomId; opponent.currentRoom = roomId;
             
-            // Rejestrujemy pokój
             rooms[roomId] = { aiVotes: 0, aiMode: false };
             activeMatches++;
 
@@ -59,6 +92,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Pokoje prywatne
     socket.on('create_room', (roomId) => {
         socket.join(roomId);
         socket.currentRoom = roomId;
@@ -69,13 +103,9 @@ io.on('connection', (socket) => {
         if (room && room.size === 1) {
             socket.join(roomId);
             socket.currentRoom = roomId;
-            
-            // Rejestrujemy pokój prywatny
             rooms[roomId] = { aiVotes: 0, aiMode: false };
             activeMatches++;
-            
             io.to(roomId).emit('match_found', { roomId });
-            
             const clients = Array.from(room);
             io.sockets.sockets.get(clients[0]).emit('set_role', { isHost: true });
             socket.emit('set_role', { isHost: false });
@@ -84,16 +114,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- NOWA LOGIKA AI ---
+    // --- LOGIKA SĘDZIEGO AI (Gemini) ---
     socket.on('request_ai', () => {
         let roomId = socket.currentRoom;
         if (roomId && rooms[roomId]) {
             rooms[roomId].aiVotes++;
-            // Powiadomienia na czacie
             socket.emit('chat_msg', "Zaproponowałeś użycie AI do oceny.");
             socket.to(roomId).emit('chat_msg', "Przeciwnik proponuje użycie AI do sędziowania. Kliknij przycisk AI, aby się zgodzić.");
             
-            // Jeśli obaj się zgodzą
             if (rooms[roomId].aiVotes >= 2) {
                 rooms[roomId].aiMode = true;
                 io.to(roomId).emit('ai_mode_active');
@@ -106,7 +134,6 @@ io.on('connection', (socket) => {
         let roomId = socket.currentRoom;
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
-                // Używamy super szybkiego modelu flash
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const prompt = `Jesteś sędzią w grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania opisują ten sam powód / mają taki sam sens logiczny w kontekście psychologicznego wyboru przedmiotu? Odpowiedz tylko jednym słowem: TAK lub NIE.`;
                 
@@ -117,13 +144,13 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('ai_evaluation_result', isAgree);
             } catch (e) {
                 console.error("AI Error:", e);
-                io.to(roomId).emit('chat_msg', "🤖 Wystąpił błąd podczas analizy AI. Uznaję, że kartki były niezgodne.");
+                io.to(roomId).emit('chat_msg', "🤖 Błąd AI. Uznaję brak zgodności.");
                 io.to(roomId).emit('ai_evaluation_result', false);
             }
         }
     });
 
-    // Przekaźnik zdarzeń
+    // Przekaźnik zdarzeń gry (Relay)
     const relayEvent = (eventName) => {
         socket.on(eventName, (data) => {
             if (socket.currentRoom) {
@@ -138,14 +165,13 @@ io.on('connection', (socket) => {
     relayEvent('next_round');
     relayEvent('end_game');
 
+    // Rozłączenie
     socket.on('disconnect', () => {
         if (socket.queueRank && queues[socket.queueRank]) {
             queues[socket.queueRank] = queues[socket.queueRank].filter(s => s !== socket);
         }
-
         if (socket.currentRoom) {
             socket.to(socket.currentRoom).emit('opponent_disconnected');
-            // Czyścimy pokój po wyjściu graczy
             delete rooms[socket.currentRoom];
             activeMatches--;
             if (activeMatches < 0) activeMatches = 0;
@@ -153,6 +179,7 @@ io.on('connection', (socket) => {
     });
 });
 
+// Statystyki serwera w Supabase
 setInterval(async () => {
     if (supabase && activeMatches > 0) {
         let playersInGame = activeMatches * 2; 
