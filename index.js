@@ -188,33 +188,32 @@ socket.on('evaluate_ai', async (data) => {
         if (roomId && rooms[roomId] && rooms[roomId].aiMode) {
             try {
                 console.log("API Key start:", (process.env.GEMINI_API_KEY || "BRAK").substring(0, 5));
-                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+                // Wymuszenie na modelu zwrotu struktury JSON (responseMimeType)
+                const model = genAI.getGenerativeModel({ 
+                    model: "gemini-2.5-flash",
+                    generationConfig: { responseMimeType: "application/json" }
+                });
                 
-                const prompt = `Jesteś sędzią w psychologicznej grze w truciznę. Gracz 1 zapisał intencję: "${data.r1}". Gracz 2 zapisał intencję: "${data.r2}". Twoim zadaniem jest ocenić, czy te dwa zdania mają taki sam sens logiczny/opisują ten sam powód wyboru.
-Odpowiedz obowiązkowo w formacie JSON zawierającym dwa pola:
-- "werdykt": wpisz dokładnie "TAK" lub "NIE"
-- "uzasadnienie": bardzo krótkie, jednozdaniowe wyjaśnienie Twojej decyzji.`;
+                const prompt = `Jesteś sędzią w psychologicznej grze. Gracz 1 napisał: "${data.r1}". Gracz 2 napisał: "${data.r2}". Czy te dwa zdania mają taki sam sens logiczny w kontekście ukrytej intencji?
+Zwróć poprawny JSON z dwoma polami:
+"werdykt": wpisz "TAK" lub "NIE",
+"uzasadnienie": krótkie, jednozdaniowe wyjaśnienie Twojej decyzji.`;
                 
                 const result = await model.generateContent(prompt);
-                let text = result.response.text().trim();
-                
-                // Zabezpieczenie przed znacznikami markdown, jeśli AI zwróci blok kodu ```json
-                text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const text = result.response.text();
                 
                 let isAgree = false;
-                let reason = "";
+                let reason = "Brak uzasadnienia.";
 
                 try {
                     const parsed = JSON.parse(text);
                     isAgree = parsed.werdykt === "TAK";
-                    reason = parsed.uzasadnienie || "Brak uzasadnienia.";
+                    reason = parsed.uzasadnienie;
                 } catch (parseError) {
-                    // Fallback, jeśli AI zwróci zwykły tekst zamiast JSON
-                    isAgree = text.toUpperCase().includes('TAK');
-                    reason = text;
+                    console.error("Błąd parsowania JSON od AI:", parseError, text);
+                    reason = "Błąd dekodowania odpowiedzi AI.";
                 }
                 
-                // Wysyłamy teraz obiekt zawierający isAgree oraz reason
                 io.to(roomId).emit('ai_evaluation_result', { isAgree, reason });
             } catch (e) {
                 console.error("AI Error:", e);
