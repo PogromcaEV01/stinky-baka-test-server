@@ -2,32 +2,54 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { createClient } = require('@supabase/supabase-js');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); // NOWE
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const cors = require('cors');
+const path = require('path'); // DODANE: Wymagane do ścieżek plików
 
 const port = process.env.PORT || 10000;
 const app = express();
 app.use(cors());
+app.use(express.json()); // DODANE: Pozwala serwerowi czytać dane wysłane w formacie JSON (loginy i hasła)
+
+// DODANE: Serwowanie plików statycznych (stron HTML) z folderu 'public'
+app.use(express.static(path.join(__dirname, 'public'))); 
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// Inicjalizacja Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "brak_klucza");
+// ... (tutaj zostaje Twoja inicjalizacja Gemini i Supabase bez zmian) ...
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
-let supabase = null;
-if (supabaseUrl && supabaseKey) {
-    supabase = createClient(supabaseUrl, supabaseKey);
-    console.log("Supabase zainicjowane poprawnie.");
-}
+// --- NOWY ENDPOINT: LOGOWANIE PREMIUM ---
+app.post('/api/login', async (req, res) => {
+    const { username, password } = req.body;
 
-let queues = { 1: [], 2: [], 3: [], 4: [] };
-let activeMatches = 0;
+    if (!supabase) {
+        return res.status(500).json({ success: false, message: "Błąd serwera: Baza danych odłączona." });
+    }
 
-// Obiekt do przechowywania danych o pokojach (np. zgoda na AI)
-const rooms = {};
+    try {
+        // Szukamy użytkownika w tabeli Supabase
+        const { data, error } = await supabase
+            .from('premium_users')
+            .select('*')
+            .eq('username', username)
+            .eq('password', password)
+            .single();
+
+        if (data) {
+            // Znaleziono użytkownika - logowanie poprawne
+            res.json({ success: true, redirectUrl: '/spigir_1.html' });
+        } else {
+            // Nie znaleziono - zły login lub hasło
+            res.status(401).json({ success: false, message: "Nieprawidłowy login lub hasło." });
+        }
+    } catch (e) {
+        console.error("Błąd logowania:", e);
+        res.status(500).json({ success: false, message: "Wystąpił błąd podczas weryfikacji." });
+    }
+});
+
+// ... (reszta kodu z io.on('connection') i setInterval zostaje dokładnie tak jak była) ...
 
 io.on('connection', (socket) => {
     
