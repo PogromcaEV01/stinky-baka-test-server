@@ -191,7 +191,7 @@ socket.on('evaluate_ai', async (data) => {
                 
                 // Wymuszenie na modelu zwrotu struktury JSON (responseMimeType)
                 const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-flash",
+    model: "gemini-2.5-flash",
     generationConfig: { responseMimeType: "application/json" }
 });
                 
